@@ -1,8 +1,10 @@
 # app/routes/sync.py
+import json
 import traceback
 from fastapi import APIRouter, HTTPException, Query
+from app.models.internal import CreateTicketDirectRequest
 from app.services.customer_sync import sync_customers, sync_single_customer
-from app.services.ticket_sync import sync_single_ticket, sync_tickets
+from app.services.ticket_sync import sync_single_ticket, sync_single_ticket_direct, sync_tickets
 
 router = APIRouter()
 
@@ -39,3 +41,11 @@ async def create_ticket_sync(
     if not result:
         raise HTTPException(status_code=400, detail="Ticket sync failed")
     return result
+
+@router.post("/tickets/create/direct")
+async def create_ticket_direct(ticket: CreateTicketDirectRequest):
+    try:
+        return await sync_single_ticket_direct(ticket.dict())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    

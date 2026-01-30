@@ -127,3 +127,47 @@ async def sync_single_ticket(ticket_id: int):
         "hubspot_id": hubspot_ticket_id,
         "status": "SYNCED"
     }
+
+async def sync_single_ticket_direct(ticket:dict):
+   
+
+    # Already synced?
+   
+    
+
+    # Customer mapping check
+    hubspot_customer_id = await get_value(f"customer:{ticket.get('customer_id')}")
+    if not hubspot_customer_id:
+        return {
+
+            "status": "SKIPPED",
+            "reason": "Customer not synced"
+        }
+
+    payload = {
+        "properties": {
+            "subject": ticket.get('title'),
+            "content": ticket.get('description') or "",
+            "hs_ticket_priority": ticket.get('priority', '').upper(),
+            "hs_pipeline_stage": 1,
+            "hs_pipeline": "0",
+            # "hs_pipeline_stage": "1"
+        },
+        "associations": [
+            {
+                "to": {"id": hubspot_customer_id},
+                "types": [
+                    {
+                        "associationCategory": "HUBSPOT_DEFINED",
+                        "associationTypeId": 16
+                    }
+                ]
+            }
+        ]
+    }
+    hubspot_ticket_id = await create_ticket(payload)
+
+    return {
+        "hubspot_id": hubspot_ticket_id,
+        "status": "SYNCED"
+    }

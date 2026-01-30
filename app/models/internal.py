@@ -19,3 +19,10 @@ class InternalTicket(BaseModel):
     status: str
     assigned_to: Optional[int] = None
 
+
+class CreateTicketDirectRequest(BaseModel):
+    customer_id: int
+    title: str
+    description: Optional[str] = ""
+    priority: str
+    assigned_to: Optional[int] = None
