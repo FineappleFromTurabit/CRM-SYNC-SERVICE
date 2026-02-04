@@ -1,5 +1,5 @@
 from app.clients.internal_api import fetch_tickets
-from app.clients.hubspot_api import create_ticket
+from app.clients.hubspot_api import create_ticket, delete_ticket, fetch_hubspot_tickets, update_ticket
 from app.redis_client import get_value, set_value
 
 
@@ -170,4 +170,65 @@ async def sync_single_ticket_direct(ticket:dict):
     return {
         "hubspot_id": hubspot_ticket_id,
         "status": "SYNCED"
+    }
+
+
+async def get_tickets_from_hubspot():
+    data = await fetch_hubspot_tickets()
+
+    tickets = []
+    for t in data.get("results", []):
+        tickets.append({
+            "hubspot_id": t["id"],
+            "title": t["properties"].get("subject"),
+            "description": t["properties"].get("content"),
+            "priority": t["properties"].get("hs_ticket_priority"),
+            "status": t["properties"].get("hs_pipeline_stage"),
+            "created_at": t["properties"].get("createdate")
+        })
+
+    return {
+        "source": "hubspot",
+        "count": len(tickets),
+        "tickets": tickets
+    }
+
+async def update_hubspot_ticket_only(
+    hubspot_ticket_id: str,
+    title: str | None = None,
+    description: str | None = None,
+    priority: str | None = None,
+    status_stage: str | None = None
+):
+    properties = {}
+
+    if title:
+        properties["subject"] = title
+
+    if description:
+        properties["content"] = description
+
+    if priority:
+        properties["hs_ticket_priority"] = priority.upper()
+
+    if status_stage:
+        properties["hs_pipeline_stage"] = status_stage  # must be stage ID
+
+    if not properties:
+        return {"status": "SKIPPED", "reason": "No fields to update"}
+
+    updated = await update_ticket(hubspot_ticket_id, properties)
+
+    return {
+        "hubspot_id": hubspot_ticket_id,
+        "status": "UPDATED",
+        "updated_fields": list(properties.keys())
+    }
+
+async def delete_hubspot_ticket_only(hubspot_ticket_id: str):
+    await delete_ticket(hubspot_ticket_id)
+
+    return {
+        "hubspot_id": hubspot_ticket_id,
+        "status": "DELETED"
     }
