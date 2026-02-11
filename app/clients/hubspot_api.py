@@ -43,7 +43,7 @@ async def create_ticket(payload: dict) -> str:
         return res.json()["id"]
 
 
-async def fetch_hubspot_tickets(limit: int = 50):
+async def fetch_hubspot_tickets(limit: int = 100):
     url = f"{HUBSPOT_BASE_URL}/crm/v3/objects/tickets"
 
     params = {
@@ -53,7 +53,8 @@ async def fetch_hubspot_tickets(limit: int = 50):
             "content",
             "hs_ticket_priority",
             "hs_pipeline_stage",
-            "createdate"
+            "createdate",
+            "hs_all_associated_contact_emails"
         ]
     }
 

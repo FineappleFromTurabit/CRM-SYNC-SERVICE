@@ -1,10 +1,11 @@
 # app/routes/sync.py
 import json
 import traceback
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from app.models.internal import CreateTicketDirectRequest
 from app.services.customer_sync import sync_customers, sync_single_customer
 from app.services.ticket_sync import delete_hubspot_ticket_only, sync_single_ticket, sync_single_ticket_direct, sync_tickets,get_tickets_from_hubspot, update_hubspot_ticket_only
+from app.auth_middleware import auth_required
 
 router = APIRouter()
 
@@ -49,8 +50,20 @@ async def create_ticket_direct(ticket: CreateTicketDirectRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     
+# @router.get("/tickets/hubspot")
+# async def fetch_tickets_from_hubspot(
+#     customer_name: str | None = Query(None),
+#     status: str | None = Query(None),
+#     priority: str | None = Query(None),
+# ):
+#     return await get_tickets_from_hubspot(
+#         customer_name=customer_name,
+#         status=status,
+#         priority=priority
+#     )
 @router.get("/tickets/hubspot")
-async def fetch_tickets_from_hubspot():
+@auth_required
+async def fetch_tickets_from_hubspot(request : Request):
     return await get_tickets_from_hubspot()
 
 @router.patch("/tickets/{hubspot_ticket_id}")

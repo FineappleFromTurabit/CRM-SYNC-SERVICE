@@ -1,8 +1,14 @@
+from fastapi import HTTPException
+import httpx
 from app.clients.internal_api import fetch_tickets
 from app.clients.hubspot_api import create_ticket, delete_ticket, fetch_hubspot_tickets, update_ticket
 from app.redis_client import get_value, set_value
+from app.config import HUBSPOT_BASE_URL, HUBSPOT_TOKEN
 
-
+HEADERS = {
+    "Authorization": f"Bearer {HUBSPOT_TOKEN}",
+    "Content-Type": "application/json"
+}
 # =========================
 # Sync ALL tickets
 # =========================
@@ -174,7 +180,10 @@ async def sync_single_ticket_direct(ticket:dict):
 
 
 async def get_tickets_from_hubspot():
-    data = await fetch_hubspot_tickets()
+    try:
+        data = await fetch_hubspot_tickets()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"HubSpot API error: {str(e)}")
 
     tickets = []
     for t in data.get("results", []):
@@ -184,7 +193,8 @@ async def get_tickets_from_hubspot():
             "description": t["properties"].get("content"),
             "priority": t["properties"].get("hs_ticket_priority"),
             "status": t["properties"].get("hs_pipeline_stage"),
-            "created_at": t["properties"].get("createdate")
+            "created_at": t["properties"].get("createdate"),
+            "customer_mail": t['properties'].get('hs_all_associated_contact_emails')  # Get first associated contact ID
         })
 
     return {
@@ -192,6 +202,48 @@ async def get_tickets_from_hubspot():
         "count": len(tickets),
         "tickets": tickets
     }
+
+# async def get_tickets_from_hubspot(
+#     customer_name: str | None = None,
+#     status: str | None = None,
+#     priority: str | None = None,
+# ):
+#     filters = []
+
+#     if status:
+#         filters.append({
+#             "propertyName": "hs_pipeline_stage",
+#             "operator": "EQ",
+#             "value": status
+#         })
+
+#     if priority:
+#         filters.append({
+#             "propertyName": "hs_ticket_priority",
+#             "operator": "EQ",
+#             "value": priority.upper()
+#         })
+
+#     payload = {
+#         "filterGroups": [{"filters": filters}] if filters else [],
+#         "properties": [
+#             "subject",
+#             "content",
+#             "hs_ticket_priority",
+#             "hs_pipeline_stage",
+#             "createdate"
+#         ]
+#     }
+
+#     async with httpx.AsyncClient() as client:
+#         res = await client.post(
+#             f"{HUBSPOT_BASE_URL}/crm/v3/objects/tickets/search",
+#             headers=HEADERS,
+#             json=payload
+#         )
+#         res.raise_for_status()
+#         return res.json()["results"]
+
 
 async def update_hubspot_ticket_only(
     hubspot_ticket_id: str,
