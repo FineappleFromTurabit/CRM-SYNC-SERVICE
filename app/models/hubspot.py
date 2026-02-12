@@ -30,3 +30,8 @@ class HubSpotTicket(BaseModel):
                 "hs_pipeline_stage": ticket.status.lower(),
             }
         )
+
+class HubspotCustomerDirect(BaseModel):
+    email: str
+    name: str
+    company: str

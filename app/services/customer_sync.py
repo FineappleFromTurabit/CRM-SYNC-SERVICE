@@ -1,7 +1,7 @@
 # app/services/customer_sync.py
 from app.clients.internal_api import fetch_customers
 from app.clients.hubspot_api import create_contact
-from app.models.hubspot import HubSpotContact
+from app.models.hubspot import HubSpotContact, HubspotCustomerDirect
 from app.redis_client import get_value,set_value
 
 async def sync_customers():
@@ -53,4 +53,21 @@ async def sync_single_customer(customer_id: int):
         "internal_id": customer.id,
         "hubspot_id": hubspot_id,
         "status": "SYNCED"
+    }
+
+
+async def create_customer_direct(customer : HubspotCustomerDirect):
+    
+    payload = {
+        "properties": {
+            "email": customer.email,
+            "firstname": customer.name,
+            "company": customer.company or ""
+        }
+    }
+    hubspot_id = await create_contact(payload)
+
+    return {
+        "hubspot_id": hubspot_id,
+        "status": "Created"
     }

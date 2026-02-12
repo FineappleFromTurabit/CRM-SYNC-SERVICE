@@ -1,7 +1,7 @@
 # app/config.py
 import os
 
-INTERNAL_API_BASE = os.getenv("INTERNAL_API_BASE", "http://127.0.0.1:5000")
+INTERNAL_API_BASE = os.getenv("INTERNAL_API_BASE", "http://127.0.0.1:8000")
 
 HUBSPOT_BASE_URL = "https://api.hubapi.com"
 

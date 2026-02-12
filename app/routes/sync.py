@@ -2,8 +2,9 @@
 import json
 import traceback
 from fastapi import APIRouter, Body, HTTPException, Query, Request
+from app.models.hubspot import HubSpotContact, HubspotCustomerDirect
 from app.models.internal import CreateTicketDirectRequest
-from app.services.customer_sync import sync_customers, sync_single_customer
+from app.services.customer_sync import create_customer_direct, sync_customers, sync_single_customer
 from app.services.ticket_sync import delete_hubspot_ticket_only, sync_single_ticket, sync_single_ticket_direct, sync_tickets,get_tickets_from_hubspot, update_hubspot_ticket_only
 from app.auth_middleware import auth_required
 
@@ -34,6 +35,27 @@ async def create_customer_sync(
         raise HTTPException(status_code=400, detail="Customer sync failed")
     return result
 
+@router.post("/customers/create/direct")
+async def create_direct_customer(request:Request):
+    body = await request.json()
+    print("🔥 RAW BODY RECEIVED:", body)
+
+    customer = HubspotCustomerDirect(**body)
+
+    print(f"✅ Parsed Model: {customer}")
+    # FastAPI now knows to read the JSON body because of the type hint
+    print(f"✅ Received JSON Payload: {customer}")
+
+    try:
+        # Pass the individual fields to your logic function
+        # Note: We access them with dot notation now (customer.email)
+        return await create_customer_direct(
+            customer=customer
+        )
+    except Exception as e:
+        print(f"❌ Error creating customer: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.post("/tickets/create")
 async def create_ticket_sync(
     ticket_id: int = Query(..., description="Internal ticket ID")
@@ -44,7 +66,8 @@ async def create_ticket_sync(
     return result
 
 @router.post("/tickets/create/direct")
-async def create_ticket_direct(ticket: CreateTicketDirectRequest):
+@auth_required
+async def create_ticket_direct(ticket: CreateTicketDirectRequest,request : Request):
     try:
         return await sync_single_ticket_direct(ticket.dict())
     except Exception as e:
@@ -62,7 +85,7 @@ async def create_ticket_direct(ticket: CreateTicketDirectRequest):
 #         priority=priority
 #     )
 @router.get("/tickets/hubspot")
-@auth_required
+# @auth_required
 async def fetch_tickets_from_hubspot(request : Request):
     return await get_tickets_from_hubspot()
 

@@ -263,9 +263,17 @@ async def update_hubspot_ticket_only(
     if priority:
         properties["hs_ticket_priority"] = priority.upper()
 
-    if status_stage:
-        properties["hs_pipeline_stage"] = status_stage  # must be stage ID
+    stage_map = {
+            "open": "1",
+            "inprogress": "2",
+            "closed": "4"
+        }
 
+    if status_stage:
+        mapped_stage = stage_map.get(status_stage.lower(), status_stage)
+        properties["hs_pipeline_stage"] = mapped_stage
+
+        
     if not properties:
         return {"status": "SKIPPED", "reason": "No fields to update"}
 
@@ -278,8 +286,14 @@ async def update_hubspot_ticket_only(
     }
 
 async def delete_hubspot_ticket_only(hubspot_ticket_id: str):
-    await delete_ticket(hubspot_ticket_id)
 
+    deleted = await delete_ticket(hubspot_ticket_id)
+
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Ticket {hubspot_ticket_id} not found"
+        )
     return {
         "hubspot_id": hubspot_ticket_id,
         "status": "DELETED"
