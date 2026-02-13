@@ -1,9 +1,10 @@
 from fastapi import HTTPException
+import requests
 import httpx
 from app.clients.internal_api import fetch_tickets
 from app.clients.hubspot_api import create_ticket, delete_ticket, fetch_hubspot_tickets, update_ticket
 from app.redis_client import get_value, set_value
-from app.config import HUBSPOT_BASE_URL, HUBSPOT_TOKEN
+from app.config import HUBSPOT_BASE_URL, HUBSPOT_TOKEN, INTERNAL_API_BASE
 
 HEADERS = {
     "Authorization": f"Bearer {HUBSPOT_TOKEN}",
@@ -133,32 +134,66 @@ async def sync_single_ticket(ticket_id: int):
         "hubspot_id": hubspot_ticket_id,
         "status": "SYNCED"
     }
+async def sync_single_ticket_direct(ticket: dict):
 
-async def sync_single_ticket_direct(ticket:dict):
-   
+    customer_mail = ticket.get("customer_mail")
 
-    # Already synced?
-   
-    
+    # ---------------- CUSTOMER LOOKUP ----------------
+    try:
 
-    # Customer mapping check
-    hubspot_customer_id = await get_value(f"customer:{ticket.get('customer_id')}")
-    if not hubspot_customer_id:
+        
+        res =requests.get(
+            f"{INTERNAL_API_BASE}/customers/mail",
+            params={"customer_mail": customer_mail}
+        )
+
+
+        res.raise_for_status()
+        customers = res.json()
+
+    except Exception as e:
         return {
-
-            "status": "SKIPPED",
-            "reason": "Customer not synced"
+            "status": "FAILED",
+            "reason": f"Customer lookup failed: {e}"
         }
 
+
+    if not customers:
+        return {
+            "status": "SKIPPED",
+            "reason": "Customer not found"
+        }
+
+    customer_id = customers[0].get("id")
+
+    if not customer_id:
+        return {
+            "status": "FAILED",
+            "reason": "Customer ID missing"
+        }
+
+    # ---------------- REDIS MAPPING ----------------
+    hubspot_customer_id = await get_value(f"customer:{customer_id}")
+
+    if not hubspot_customer_id:
+        return {
+            "status": "SKIPPED",
+            "reason": "Customer not synced to HubSpot"
+        }
+
+    # ---------------- BUILD HUBSPOT PAYLOAD ----------------
+    properties = {
+        "subject": ticket.get("title"),
+        "content": ticket.get("description") or "",
+        "hs_pipeline_stage": "1",   # MUST be string
+        "hs_pipeline": "0",
+    }
+
+    if ticket.get("priority"):
+        properties["hs_ticket_priority"] = ticket["priority"].upper()
+
     payload = {
-        "properties": {
-            "subject": ticket.get('title'),
-            "content": ticket.get('description') or "",
-            "hs_ticket_priority": ticket.get('priority', '').upper(),
-            "hs_pipeline_stage": 1,
-            "hs_pipeline": "0",
-            # "hs_pipeline_stage": "1"
-        },
+        "properties": properties,
         "associations": [
             {
                 "to": {"id": hubspot_customer_id},
@@ -171,12 +206,24 @@ async def sync_single_ticket_direct(ticket:dict):
             }
         ]
     }
-    hubspot_ticket_id = await create_ticket(payload)
+
+
+    # ---------------- HUBSPOT CREATE ----------------
+    try:
+        hubspot_ticket_id = await create_ticket(payload)
+
+    except Exception as e:
+        return {
+            "status": "FAILED",
+            "reason": "HubSpot ticket creation failed"
+        }
 
     return {
         "hubspot_id": hubspot_ticket_id,
         "status": "SYNCED"
     }
+
+
 
 
 async def get_tickets_from_hubspot():
@@ -202,48 +249,6 @@ async def get_tickets_from_hubspot():
         "count": len(tickets),
         "tickets": tickets
     }
-
-# async def get_tickets_from_hubspot(
-#     customer_name: str | None = None,
-#     status: str | None = None,
-#     priority: str | None = None,
-# ):
-#     filters = []
-
-#     if status:
-#         filters.append({
-#             "propertyName": "hs_pipeline_stage",
-#             "operator": "EQ",
-#             "value": status
-#         })
-
-#     if priority:
-#         filters.append({
-#             "propertyName": "hs_ticket_priority",
-#             "operator": "EQ",
-#             "value": priority.upper()
-#         })
-
-#     payload = {
-#         "filterGroups": [{"filters": filters}] if filters else [],
-#         "properties": [
-#             "subject",
-#             "content",
-#             "hs_ticket_priority",
-#             "hs_pipeline_stage",
-#             "createdate"
-#         ]
-#     }
-
-#     async with httpx.AsyncClient() as client:
-#         res = await client.post(
-#             f"{HUBSPOT_BASE_URL}/crm/v3/objects/tickets/search",
-#             headers=HEADERS,
-#             json=payload
-#         )
-#         res.raise_for_status()
-#         return res.json()["results"]
-
 
 async def update_hubspot_ticket_only(
     hubspot_ticket_id: str,
@@ -273,7 +278,6 @@ async def update_hubspot_ticket_only(
         mapped_stage = stage_map.get(status_stage.lower(), status_stage)
         properties["hs_pipeline_stage"] = mapped_stage
 
-        
     if not properties:
         return {"status": "SKIPPED", "reason": "No fields to update"}
 

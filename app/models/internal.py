@@ -21,7 +21,7 @@ class InternalTicket(BaseModel):
 
 
 class CreateTicketDirectRequest(BaseModel):
-    customer_id: int
+    customer_mail: str
     title: str
     description: Optional[str] = ""
     priority: str

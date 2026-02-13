@@ -16,7 +16,6 @@ async def fetch_customers():
 async def fetch_tickets():
     async with httpx.AsyncClient() as client:
         res = await client.get(f"{INTERNAL_API_BASE}/tickets")
-        print("RAW TICKETS:", res.json())
         res.raise_for_status()
         return [InternalTicket(**t) for t in res.json()]
 

@@ -15,7 +15,6 @@ async def create_contact(payload: dict) -> str:
                     json=payload
             )
         except httpx.HTTPError as e:
-            print("Error creating contact:", e)
             raise e
         res.raise_for_status()
         return res.json()["id"]
@@ -34,14 +33,6 @@ async def create_ticket(payload: dict) -> str:
             headers=HEADERS,
             json=payload   # 🔥 SEND FULL PAYLOAD
         )
-
-        if res.status_code >= 400:
-            print("HUBSPOT ERROR:", res.status_code, res.text)
-
-        if res.status_code == 409:
-            print("Ticket already exists")
-            return None
-
         res.raise_for_status()
         return res.json()["id"]
 
@@ -79,10 +70,6 @@ async def update_ticket(hubspot_ticket_id: str, properties: dict):
 
     async with httpx.AsyncClient(timeout=20) as client:
         res = await client.patch(url, headers=HEADERS, json=payload)
-
-        if res.status_code >= 400:
-            print("HUBSPOT UPDATE ERROR:", res.status_code, res.text)
-
         res.raise_for_status()
         return res.json()
     
@@ -91,7 +78,6 @@ async def delete_ticket(hubspot_ticket_id: str):
     hubspot_ticket_id = str(hubspot_ticket_id).strip()
 
     if not await ticket_exists(hubspot_ticket_id):
-        print("⚠️ Ticket not found, skipping delete")
         return False
 
     url = f"{HUBSPOT_BASE_URL}/crm/v3/objects/tickets/{hubspot_ticket_id}"
@@ -99,8 +85,6 @@ async def delete_ticket(hubspot_ticket_id: str):
     async with httpx.AsyncClient(timeout=15) as client:
         res = await client.delete(url, headers=HEADERS)
 
-        if res.status_code >= 400:
-            print("❌ HUBSPOT DELETE ERROR:", res.status_code, res.text)
 
         res.raise_for_status()
         return True
