@@ -1,8 +1,11 @@
 # app/routes/sync.py
 import json
 import traceback
-from fastapi import APIRouter, Body, HTTPException, Query, Request
-from app.models.hubspot import HubSpotContact, HubspotCustomerDirect
+from fastapi import APIRouter, Body, HTTPException, Header, Query, Request
+import httpx
+from app.clients.hubspot_api import get_tickets_by_owner, update_hubspot_ticket_owner
+from app.config import HUBSPOT_TOKEN
+from app.models.hubspot import AssignTicketRequest, HubSpotContact, HubspotCustomerDirect
 from app.models.internal import CreateTicketDirectRequest
 from app.services.customer_sync import create_customer_direct, sync_customers, sync_single_customer
 from app.services.ticket_sync import delete_hubspot_ticket_only, sync_single_ticket, sync_single_ticket_direct, sync_tickets,get_tickets_from_hubspot, update_hubspot_ticket_only
@@ -96,3 +99,84 @@ async def delete_ticket_endpoint(hubspot_ticket_id: str,request : Request):
         return await delete_hubspot_ticket_only(hubspot_ticket_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+
+
+
+@router.get("/hubspot/assignees")
+async def get_hubspot_assignees(authorization: str | None = Header(None)):
+    
+    if not HUBSPOT_TOKEN:
+        return {"error": "HubSpot token not configured"}
+
+    url = "https://api.hubapi.com/crm/v3/owners/"
+
+    headers = {
+        "Authorization": f"Bearer {HUBSPOT_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+
+    if response.status_code != 200:
+        return {
+            "error": "Failed to fetch owners",
+            "details": response.text
+        }
+
+    owners = response.json().get("results", [])
+
+    assignees = [
+        {
+            "id": owner["id"],
+            "email": owner.get("email"),
+            "name": f'{owner.get("firstName","")} {owner.get("lastName","")}'.strip(),
+            "role": owner.get("type")  # USER / TEAM
+        }
+        for owner in owners
+    ]
+
+    return {
+        "total": len(assignees),
+        "assignees": assignees
+    }
+
+
+
+@router.patch("/tickets/{hubspot_ticket_id}/assign")
+async def assign_ticket(
+    hubspot_ticket_id: str,
+    payload: AssignTicketRequest,
+    request: Request
+):
+
+    try:
+        result = await update_hubspot_ticket_owner(
+            hubspot_ticket_id,
+            payload.assigned_to
+        )
+
+        return {
+            "status": "SUCCESS",
+            "message": f"Ticket assigned to agent {payload.assigned_to}",
+            "data": result
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/agents/{agent_id}/workload")
+async def agent_workload(agent_id: int):
+
+    tickets = await get_tickets_by_owner(str(agent_id))
+
+    return {
+        "agent_id": agent_id,
+        "total_tickets": len(tickets),
+        "open": len([t for t in tickets if t["properties"].get("hs_pipeline_stage") == "1"]),
+        "inprogress": len([t for t in tickets if t["properties"].get("hs_pipeline_stage") == "2"]),
+        "closed": len([t for t in tickets if t["properties"].get("hs_pipeline_stage") == "4"]),
+
+        "tickets": tickets
+    }

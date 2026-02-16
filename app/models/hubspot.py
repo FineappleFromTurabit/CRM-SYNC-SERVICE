@@ -35,3 +35,7 @@ class HubspotCustomerDirect(BaseModel):
     email: str
     name: str
     company: str
+
+
+class AssignTicketRequest(BaseModel):
+    assigned_to: int

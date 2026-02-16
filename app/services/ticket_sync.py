@@ -191,6 +191,8 @@ async def sync_single_ticket_direct(ticket: dict):
 
     if ticket.get("priority"):
         properties["hs_ticket_priority"] = ticket["priority"].upper()
+    if ticket.get("assigned_to"):
+        properties["hubspot_owner_id"] = ticket["assigned_to"]
 
     payload = {
         "properties": properties,
